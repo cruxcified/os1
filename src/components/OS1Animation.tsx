@@ -103,10 +103,17 @@ export function OS1Animation({ isTTSProcessing = false, showTransformation = fal
     }
     
     // Set up renderer with pixel ratio for high DPI displays
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true
+      });
+    } catch (err) {
+      // No WebGL (old GPU, remote desktop): skip the animation, keep the app working.
+      console.warn('OS1 animation disabled:', err);
+      return;
+    }
     renderer.setPixelRatio(window.devicePixelRatio);
     
     // Adjust size on resize

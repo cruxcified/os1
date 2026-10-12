@@ -20,6 +20,19 @@ export interface ServerInfo {
   stt: string;
   tts: string;
   voice: string;
+  /** No Anthropic key yet: the app should open Settings. */
+  needsSetup: boolean;
+}
+
+/** What the settings screen reads. Secrets are never sent back, only whether they're set. */
+export interface SettingsView {
+  keys: Record<"anthropicKey" | "deepgramKey" | "elevenlabsKey" | "openaiKey", boolean>;
+  stt: string;
+  tts: string;
+  voice: string;
+  userName: string;
+  /** What "auto" currently resolves to. */
+  active: { stt: string; tts: string; voice: string };
 }
 
 export type ServerMessage =

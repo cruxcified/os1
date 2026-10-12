@@ -1,10 +1,24 @@
 import fs from "node:fs";
-import Anthropic from "@anthropic-ai/sdk";
+import path from "node:path";
+import type Anthropic from "@anthropic-ai/sdk";
+import { anthropic } from "./anthropic.ts";
 import { config } from "./config.ts";
 import type { MemoryStore } from "./memory.ts";
 
-const persona = fs.readFileSync(new URL("./persona.md", import.meta.url), "utf8");
-const client = new Anthropic();
+/** A persona.md in the data folder overrides the built-in one, and is re-read each turn. */
+function persona(): string {
+  for (const file of [
+    path.join(config.dataDir, "persona.md"),
+    path.join(config.appRoot, "server", "persona.md"),
+  ]) {
+    try {
+      return fs.readFileSync(file, "utf8");
+    } catch {
+      /* try the next one */
+    }
+  }
+  throw new Error("persona.md not found");
+}
 
 // Server-side refusal fallback is supported on these models; others just stop.
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-fable-5-1", "claude-sonnet-5-5"]);
@@ -25,7 +39,7 @@ function systemPrompt(memory: MemoryStore): Anthropic.Beta.BetaTextBlockParam[] 
     : "";
   return [
     // Persona is static: keep it first so it stays a stable cache prefix.
-    { type: "text", text: persona },
+    { type: "text", text: persona() },
     { type: "text", text: [intro, memory.render()].filter(Boolean).join("\n\n") },
   ];
 }
@@ -49,7 +63,7 @@ export async function* reply(
     ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
     : {};
 
-  const stream = client.beta.messages.stream(
+  const stream = anthropic().beta.messages.stream(
     {
       model: config.model,
       max_tokens: 4000,

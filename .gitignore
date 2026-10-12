@@ -26,3 +26,5 @@ dist-ssr
 # OS1 local data (memory, history) and secrets
 .env
 data/
+dist-electron
+release

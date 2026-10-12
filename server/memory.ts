@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
+import { anthropic } from "./anthropic.ts";
 import { config } from "./config.ts";
 import type { MemoryItem } from "../shared/protocol.ts";
 
@@ -13,8 +13,8 @@ export interface HistoryEntry {
   at: number;
 }
 
-const memoryFile = path.join(config.dataDir, "memory.json");
-const historyFile = path.join(config.dataDir, "history.json");
+const memoryFile = () => path.join(config.dataDir, "memory.json");
+const historyFile = () => path.join(config.dataDir, "history.json");
 const MAX_MEMORIES = 300;
 
 async function readJson<T>(file: string, fallback: T): Promise<T> {
@@ -52,11 +52,10 @@ export class MemoryStore {
   private items: MemoryItem[] = [];
   private history: HistoryEntry[] = [];
   private reflecting: Promise<void> = Promise.resolve();
-  private client = new Anthropic();
 
   async load() {
-    this.items = (await readJson<{ items: MemoryItem[] }>(memoryFile, { items: [] })).items;
-    this.history = (await readJson<{ messages: HistoryEntry[] }>(historyFile, { messages: [] }))
+    this.items = (await readJson<{ items: MemoryItem[] }>(memoryFile(), { items: [] })).items;
+    this.history = (await readJson<{ messages: HistoryEntry[] }>(historyFile(), { messages: [] }))
       .messages;
     return this;
   }
@@ -84,7 +83,7 @@ export class MemoryStore {
     this.history.push(entry);
     // Keep the file bounded; anything older has already been through reflection.
     if (this.history.length > 1000) this.history = this.history.slice(-500);
-    await writeJson(historyFile, { messages: this.history });
+    await writeJson(historyFile(), { messages: this.history });
   }
 
   /**
@@ -96,7 +95,7 @@ export class MemoryStore {
     if (last?.role !== "user") return undefined;
     last.content = `${last.content} ${text}`;
     last.at = Date.now();
-    await writeJson(historyFile, { messages: this.history });
+    await writeJson(historyFile(), { messages: this.history });
     return last.content;
   }
 
@@ -148,7 +147,7 @@ export class MemoryStore {
       .map((e) => `${e.role === "user" ? "Them" : "You"}: ${e.content}`)
       .join("\n");
 
-    const response = await this.client.messages.parse({
+    const response = await anthropic().messages.parse({
       model: config.memoryModel,
       max_tokens: 2000,
       system:
@@ -188,6 +187,6 @@ export class MemoryStore {
   }
 
   private saveMemories() {
-    return writeJson(memoryFile, { items: this.items });
+    return writeJson(memoryFile(), { items: this.items });
   }
 }

@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BrainCircuit, Captions, Mic, MicOff, Send } from "lucide-react";
+import { BrainCircuit, Captions, Mic, MicOff, Send, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/textarea";
 import { useCompanion } from "@/hooks/useCompanion";
-import type { MemoryItem } from "../../shared/protocol";
+import type { MemoryItem, SettingsView } from "../../shared/protocol";
 import { OS1Animation } from "./OS1Animation";
 import { AudioVisualizer } from "./AudioVisualizer";
 import { MemoryViewer } from "./MemoryViewer";
+import { SettingsPanel } from "./SettingsPanel";
 import "./OS1Animation.css";
+
+/** Running inside the OS1 desktop app (Electron) rather than a browser tab. */
+const isDesktopApp = navigator.userAgent.includes("Electron");
 
 const STATUS: Record<string, string> = {
   listening: "listening",
@@ -24,6 +28,33 @@ export function Companion() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [memories, setMemories] = useState<MemoryItem[] | null>(null);
   const wokeOnce = useRef(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [firstRun, setFirstRun] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
+
+  // First run: no Anthropic key yet, so open Settings before anything else.
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((res) => (res.ok ? (res.json() as Promise<SettingsView>) : null))
+      .then((view) => {
+        if (view && !view.keys.anthropicKey) {
+          setFirstRun(true);
+          setSettingsOpen(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSetupChecked(true));
+  }, []);
+
+  // The desktop app has no autoplay or mic-gesture restrictions: wake right away.
+  // Only once: if it fails (no mic, permission denied), "tap to begin" takes over.
+  const { phase, wake } = os;
+  const autoWoke = useRef(false);
+  useEffect(() => {
+    if (!isDesktopApp || autoWoke.current || phase !== "asleep" || !setupChecked || settingsOpen) return;
+    autoWoke.current = true;
+    void wake();
+  }, [phase, wake, setupChecked, settingsOpen]);
 
   useEffect(() => {
     document.body.classList.add("os1-theme");
@@ -84,8 +115,9 @@ export function Companion() {
   return (
     <div
       className="os1-container"
-      onClick={os.phase === "asleep" ? () => void os.wake() : undefined}
+      onClick={os.phase === "asleep" && !settingsOpen ? () => void os.wake() : undefined}
     >
+      {isDesktopApp && <div className="titlebar-drag" />}
       <OS1Animation isTTSProcessing={busy} showTransformation={transforming} />
 
       {os.phase === "connecting" && (
@@ -140,6 +172,13 @@ export function Companion() {
               <Captions className="icon" />
             </button>
             <button
+              className="memory-button"
+              onClick={() => setSettingsOpen(true)}
+              title="Settings"
+            >
+              <Settings className="icon" />
+            </button>
+            <button
               className={`memory-button ${memoryOpen ? "active" : ""}`}
               onClick={() => {
                 if (!memoryOpen) setMemories(null);
@@ -171,6 +210,14 @@ export function Companion() {
           />
         </>
       )}
+      <SettingsPanel
+        open={settingsOpen}
+        firstRun={firstRun}
+        onClose={() => {
+          setSettingsOpen(false);
+          setFirstRun(false);
+        }}
+      />
     </div>
   );
 }

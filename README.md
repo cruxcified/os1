@@ -32,15 +32,38 @@ What makes it feel natural:
 
 ## Getting started
 
-Requires Node 22+.
+OS1 is a desktop app for Mac and Windows. It has its own window and a menu bar (or tray) icon, and it keeps running when you close the window. Everything runs on your computer except the calls to Claude and the voice services.
+
+Requires Node 22+ to build.
 
 ```bash
 npm install
-cp .env.example .env     # then add your keys
+npm run desktop        # run the app from source
+```
+
+On first launch it asks for your API keys (only Anthropic is required), then wakes up and says hello. macOS will ask for microphone access. Headphones help: with speakers, its own voice can occasionally be mistaken for you interrupting.
+
+### Building an installable app
+
+Build on the OS you're targeting:
+
+```bash
+npm run dist:mac       # on a Mac: release/OS1-<version>.dmg
+npm run dist:win       # on Windows: release/OS1 Setup <version>.exe
+```
+
+The builds aren't code-signed, so the first launch needs a nudge: on macOS, right-click OS1 in Applications and choose Open; on Windows, choose "More info" then "Run anyway" on the SmartScreen prompt.
+
+Your keys, memories and conversation live in the app's data folder (open it from the tray menu or Help > Open Data Folder): `~/Library/Application Support/OS1` on macOS, `%APPDATA%\OS1` on Windows.
+
+### Running in a browser instead
+
+```bash
+cp .env.example .env     # add your keys, or set them later in Settings
 npm run dev
 ```
 
-Open http://localhost:5173, tap the screen, allow the microphone, and say hi. Headphones help: with speakers, its own voice can occasionally be mistaken for you interrupting.
+Then open http://localhost:5173 and tap the screen to begin.
 
 ### Keys and defaults
 
@@ -52,24 +75,26 @@ Open http://localhost:5173, tap the screen, allow the microphone, and say hi. He
 
 The cheapest good setup is Anthropic plus OpenAI (one key covers ears and voice). The most natural one is Anthropic plus Deepgram plus ElevenLabs. Every voice default is a deeper male voice; change it with `OS1_VOICE` (any ElevenLabs voice ID, an OpenAI voice name, or a Kokoro voice like `am_michael` or `bm_george`).
 
-For snappier, cheaper replies set `OS1_MODEL=claude-haiku-5-5`. For deeper conversations, raise `OS1_EFFORT` to `medium`. All options are in [.env.example](.env.example).
+For snappier, cheaper replies set `OS1_MODEL=claude-haiku-5-5`. For deeper conversations, raise `OS1_EFFORT` to `medium`. Keys, voices and your name can be changed in the app's Settings (the gear icon). Advanced options are in [.env.example](.env.example).
 
 ### Personality
 
-The persona lives in [server/persona.md](server/persona.md). It's plain prose, so edit it freely: how it talks, how long its replies are, what it cares about. It starts without a name and, like Samantha, can choose one.
+The persona lives in [server/persona.md](server/persona.md). It's plain prose, so edit it freely: how it talks, how long its replies are, what it cares about. It starts without a name and, like Samantha, can choose one. To change it in the installed app, put your own `persona.md` in the data folder; it's re-read on every turn, so edits apply immediately.
 
 ### Memory
 
-Everything is stored as readable JSON in `data/` (git-ignored):
+Everything is stored as readable JSON in the data folder (`data/` when running from source, git-ignored):
 
-- `data/memory.json`: facts it has learned, about you and about itself. You can also browse and delete these from the brain icon in the app.
-- `data/history.json`: the recent conversation.
+- `memory.json`: facts it has learned, about you and about itself. You can also browse and delete these from the brain icon in the app.
+- `history.json`: the recent conversation.
+- `settings.json`: what you entered in Settings, including API keys (readable only by your user account).
 
 Delete the folder to start fresh.
 
 ## Project layout
 
 ```
+desktop/main.ts    the desktop app: window, tray, mic permission; runs the server in-process
 server/            Node server: one process serves the app and the voice socket
   index.ts         HTTP + WebSocket server (embeds Vite in dev)
   session.ts       the turn loop: transcribe, think, speak, barge-in
@@ -85,7 +110,8 @@ docs/              notes on running from a pocket device
 
 ## Scripts
 
-- `npm run dev` runs everything with hot reload on one port.
+- `npm run desktop` runs the desktop app from source; `npm run dist:mac` / `npm run dist:win` build installers.
+- `npm run dev` runs everything in a browser with hot reload on one port.
 - `npm run build && npm start` runs the production build.
 - `npm test` runs the unit tests; `npm run typecheck` and `npm run lint` check the code.
 

@@ -2,7 +2,7 @@ import type { WebSocket } from "ws";
 import { config } from "./config.ts";
 import { reply } from "./brain.ts";
 import type { MemoryStore, HistoryEntry } from "./memory.ts";
-import type { SpeechToText } from "./stt/index.ts";
+import type { Providers } from "./providers.ts";
 import type { TextToSpeech } from "./tts/index.ts";
 import { SentenceChunker } from "./text.ts";
 import type { AgentState, ClientMessage, ServerMessage } from "../shared/protocol.ts";
@@ -12,8 +12,7 @@ const INTERRUPTED = "(interrupted you) ";
 
 export interface Services {
   memory: MemoryStore;
-  stt: SpeechToText;
-  tts: TextToSpeech;
+  providers: Providers;
 }
 
 interface Turn {
@@ -63,6 +62,20 @@ export class Session {
     if (this.ws.readyState === this.ws.OPEN) this.ws.send(JSON.stringify(msg));
   }
 
+  sendInfo() {
+    this.send({
+      type: "ready",
+      info: {
+        name: config.name,
+        model: config.model,
+        stt: config.stt,
+        tts: config.tts,
+        voice: config.voice,
+        needsSetup: !config.keys.anthropic,
+      },
+    });
+  }
+
   private setState(state: AgentState) {
     this.send({ type: "state", state });
   }
@@ -70,16 +83,9 @@ export class Session {
   private async handleControl(msg: ClientMessage) {
     switch (msg.type) {
       case "hello": {
-        this.send({
-          type: "ready",
-          info: {
-            name: config.name,
-            model: config.model,
-            stt: config.stt,
-            tts: config.tts,
-            voice: config.voice,
-          },
-        });
+        this.sendInfo();
+        // Nothing to talk with until there's a key; the app shows Settings instead.
+        if (!config.keys.anthropic) break;
         const last = this.services.memory.lastSpokeAt();
         if (!last) {
           await this.runTurn("(They just turned you on for the very first time.)", { quiet: true });
@@ -103,7 +109,8 @@ export class Session {
     this.setState("thinking");
     let text: string;
     try {
-      text = await this.services.stt.transcribe(wav);
+      const stt = await this.services.providers.stt;
+      text = await stt.transcribe(wav);
     } catch (err) {
       this.fail("I couldn't hear that properly", err);
       return;
@@ -157,7 +164,7 @@ export class Session {
     opts: { quiet?: boolean; existingEntry?: boolean } = {},
   ) {
     this.cancel();
-    const { memory, tts } = this.services;
+    const { memory, providers } = this.services;
     const userEntry: HistoryEntry = { role: "user", content: userText, at: Date.now() };
     const turn: Turn = { abort: new AbortController(), userEntry, spoken: "", spoke: false };
     this.current = turn;
@@ -175,11 +182,19 @@ export class Session {
     const chunker = new SentenceChunker();
     let fullText = "";
     let voiceFailed = false;
+    let tts: TextToSpeech | null = null;
+    try {
+      tts = await providers.tts;
+    } catch (err) {
+      voiceFailed = true;
+      this.send({ type: "error", message: `My voice isn't available: ${(err as Error).message}` });
+    }
     // Synthesis for each sentence starts as soon as the sentence exists (so they
     // overlap), but audio is sent strictly in order through this chain.
     let sendChain: Promise<void> = Promise.resolve();
 
     const speak = (sentence: string) => {
+      if (!tts) return;
       const audio = tts.synthesize(sentence, signal);
       audio.catch(() => {}); // surfaced in the chain below
       sendChain = sendChain.then(async () => {
