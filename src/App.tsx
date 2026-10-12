@@ -1,9 +1,12 @@
-import { LlamaChat } from "./components/LlamaChat";
-
+import { Toaster } from "sonner";
+import { Companion } from "./components/Companion";
 
 function App() {
   return (
-    <LlamaChat />
+    <>
+      <Companion />
+      <Toaster position="top-center" theme="dark" />
+    </>
   );
 }
 

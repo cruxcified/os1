@@ -684,3 +684,229 @@ body.os1-theme {
   width: 20px;
   height: 20px;
 } 
+/* --- Hands-free companion UI --- */
+.loading-bar.indeterminate {
+  width: 100%;
+}
+
+.wake-prompt {
+  position: absolute;
+  bottom: 18vh;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.1rem;
+  letter-spacing: 0.2em;
+  text-transform: lowercase;
+  opacity: 0.85;
+  cursor: pointer;
+  animation: fade-in 1.2s ease-out forwards;
+}
+
+.captions {
+  position: fixed;
+  bottom: 170px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 560px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.captions p {
+  margin: 0.35rem 0;
+  line-height: 1.45;
+  animation: os1-fade 0.4s ease-out forwards;
+}
+
+/* Opacity-only fade (the older fade-in also re-centers with a transform). */
+@keyframes os1-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.caption-you {
+  font-size: 0.85rem;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.caption-os1 {
+  font-size: 1.05rem;
+  opacity: 0.95;
+  max-height: 6.5em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.status-line {
+  position: fixed;
+  bottom: 95px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  letter-spacing: 0.25em;
+  opacity: 0.55;
+  min-height: 1em;
+  z-index: 4;
+}
+
+/* --- Desktop app --- */
+.titlebar-drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 32px;
+  -webkit-app-region: drag;
+  z-index: 50;
+}
+
+/* --- Settings --- */
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(60, 20, 10, 0.35);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  animation: os1-fade 0.3s ease-out forwards;
+}
+
+.settings-panel {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 20px;
+  padding: 1.4rem 1.4rem 1.2rem;
+  color: white;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-header h2 {
+  font-size: 1.25rem;
+  font-weight: 300;
+  letter-spacing: 0.04em;
+}
+
+.settings-close,
+.settings-clear {
+  background: none;
+  border: none;
+  color: white;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.settings-close:hover,
+.settings-clear:hover {
+  opacity: 1;
+}
+
+.settings-intro {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.settings-panel section {
+  margin-top: 1.1rem;
+}
+
+.settings-panel h3 {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-bottom: 0.4rem;
+}
+
+.settings-field {
+  display: block;
+  margin-bottom: 0.7rem;
+}
+
+.settings-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-bottom: 0.25rem;
+  opacity: 0.9;
+}
+
+.settings-label a {
+  color: white;
+  opacity: 0.6;
+  font-size: 0.75rem;
+}
+
+.settings-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.settings-clear {
+  font-size: 0.75rem;
+}
+
+.settings-panel input,
+.settings-panel select {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+  color: white;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.settings-panel input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.settings-panel input:focus,
+.settings-panel select:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.settings-panel select option {
+  color: black;
+}
+
+.settings-save {
+  margin-top: 0.6rem;
+  width: 100%;
+  padding: 0.65rem;
+  border-radius: 12px;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  color: #b4533b;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
+.settings-save:disabled {
+  opacity: 0.6;
+}
