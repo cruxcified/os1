@@ -51,14 +51,14 @@ export function OS1Animation({ isTTSProcessing = false, showTransformation = fal
       getPoint(t: number): THREE.Vector3 {
         const x = length * Math.sin(pi2 * t);
         const y = radius * Math.cos(pi2 * 3 * t);
-        let z, tmod;
+        let tmod;
         
         tmod = t % 0.25 / 0.25;
         tmod = t % 0.25 - (2 * (1 - tmod) * tmod * -0.0185 + tmod * tmod * 0.25);
         if (Math.floor(t / 0.25) == 0 || Math.floor(t / 0.25) == 2) {
           tmod *= -1;
         }
-        z = radius * Math.sin(pi2 * 2 * (t - tmod));
+        const z = radius * Math.sin(pi2 * 2 * (t - tmod));
         
         return new THREE.Vector3(x, y, z).multiplyScalar(this.scale);
       }

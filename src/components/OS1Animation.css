@@ -684,3 +684,66 @@ body.os1-theme {
   width: 20px;
   height: 20px;
 } 
+/* --- Hands-free companion UI --- */
+.loading-bar.indeterminate {
+  width: 100%;
+}
+
+.wake-prompt {
+  position: absolute;
+  bottom: 18vh;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.1rem;
+  letter-spacing: 0.2em;
+  text-transform: lowercase;
+  opacity: 0.85;
+  cursor: pointer;
+  animation: fade-in 1.2s ease-out forwards;
+}
+
+.captions {
+  position: fixed;
+  bottom: 170px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 560px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.captions p {
+  margin: 0.35rem 0;
+  line-height: 1.45;
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.caption-you {
+  font-size: 0.85rem;
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.caption-os1 {
+  font-size: 1.05rem;
+  opacity: 0.95;
+  max-height: 6.5em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.status-line {
+  position: fixed;
+  bottom: 95px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  letter-spacing: 0.25em;
+  opacity: 0.55;
+  min-height: 1em;
+  z-index: 4;
+}

@@ -1,99 +1,101 @@
-# OS1 - Local Conversational AI
+# OS1
 
-This project is an attempt to recreate some of the experience "OS1" from the movie 'Her', running entirely locally in your browser using transformers.js and featuring direct speech-to-text interaction. All the while trying to keep it lightweight at a whopping ~2GB of model downloads (which is then cached for future use).
+A personal take on OS1 from *Her*: a voice companion you just talk to. It listens hands-free, answers in a deep, warm voice within about a second, lets you interrupt it mid-sentence, and remembers you between conversations.
 
-It was a tough challenge trying to get a small 1B model to work in such a usable way without it hallucinating too much, but giving it guided prompts and a memory bank helped tremedously. **Still, this model is subject to saying nonsense at times and is far from perfect.**
+Originally forked from [callbacked/os1](https://github.com/callbacked/os1), which ran a 1B model entirely in the browser. This version trades "fully local" for "actually feels like talking to someone": Claude is the brain, and speech runs through fast streaming providers (with free local fallbacks).
 
-### Try it out: https://huggingface.co/spaces/webml-community/os1
-*(initially, you will download the required models, so loading will be a bit longer at first. Look at your browser's network tab in the console if you really want to see the models being fetched)*
+## How a conversation flows
 
-## Demo: Testing OS1's ability to remember my name
+```
+ mic ──► voice activity detection (in the browser, Silero VAD)
+           │  you stop talking for ~0.7s
+           ▼
+       WAV utterance ──► server ──► speech-to-text (Deepgram / OpenAI / local Whisper)
+                                      │
+                                      ▼
+                         Claude, streaming, with persona + memories
+                                      │  each sentence as soon as it's written
+                                      ▼
+                         text-to-speech (ElevenLabs / OpenAI / local Kokoro)
+                                      │
+ speaker ◄── gapless playback ◄───────┘
+```
 
+What makes it feel natural:
 
-https://github.com/user-attachments/assets/525c56ec-ba87-4adf-bdcd-2e1ddf90f8b2
+- **Hands-free turn-taking.** No push-to-talk. A small voice-activity model decides when you've finished a thought.
+- **Sentence streaming.** Speech starts on the first sentence while Claude is still writing the rest.
+- **Barge-in.** Start talking while it's speaking and it stops, remembers it was cut off, and follows you.
+- **"I wasn't done."** If you keep talking before it answers, both halves are treated as one message.
+- **Memory and persona continuity.** After each exchange a small, fast model writes down anything worth remembering about you, and about itself (like the name it picks for itself). These go into every conversation. The last stretch of conversation is kept verbatim too, so it picks up where you left off.
+- **Time awareness.** It knows the time of day and how long it's been since you last talked.
 
+## Getting started
 
-## Features
+Requires Node 22+.
 
-*   **Speech-to-text Conversation:** Uses the [onnx-community/ultravox-v0_5-llama-3_2-1b-ONNX](https://huggingface.co/onnx-community/ultravox-v0_5-llama-3_2-1b-ONNX) model, which accepts both audio and text input. This lets us do a direct conversational flow where your voice input is processed directly by the core LLM without converting speech into text (more pipelines, more latency).
-*   **Parallel Transcription (for Display/Memory):** While your voice directly drives the LLM, the whisper-base model runs in parallel to transcribe your speech. This transcription is used for:
-    *   Displaying your words on the screen for visual feedback.
-    *   Storing the text representation of what you said to the LLM in the vector storage. 
-    *   *Note: This transcription is **not** sent to the LLM for response generation.*
-    *   *(Why I did this: Even though the Ultravox Llama 3.2 1b model uses a Whisper backbone internally to process speech, there isn't a way to expose intermediate transcription within the LLM. Therefore, running Whisper separately is necessary for displaying speech feedback and adding user dialogue to vector storage.)*
-*   **Client-Side Memory:** Stores interactions between the user and assistant using vector storage in the browser's IndexedDB. Contextually relevant memories are automatically retrieved and injected into the LLM's system prompt. 
-*   **Local & Private:** All conversation data, memory storage, and AI model processing (including LLM, STT, TTS, Embeddings) happen locally on your machine. Nothing is sent to external servers.
-*   **Small Footprint:** Requires approximately 2GB of model downloads on first launch (cached for subsequent visits).
-*   **Proactive Greetings:** Welcomes users differently on their very first visit versus return visits, attempting to recall the user's name (if previously mentioned)by querying the memory bank.
+```bash
+npm install
+cp .env.example .env     # then add your keys
+npm run dev
+```
 
+Open http://localhost:5173, tap the screen, allow the microphone, and say hi. Headphones help: with speakers, its own voice can occasionally be mistaken for you interrupting.
 
-## What I used
+### Keys and defaults
 
-*   **Frontend:** React, Vite, TypeScript, Tailwind CSS
-*   **Models**
-    *   **Core LLM & Audio Input:** [onnx-community/ultravox-v0_5-llama-3_2-1b-ONNX](https://huggingface.co/onnx-community/ultravox-v0_5-llama-3_2-1b-ONNX)
-    *   **Speech-to-Text (For Display/Memory):** [onnx-community/whisper-base](https://huggingface.co/onnx-community/whisper-base)
-    *   **Text-to-Speech:** [hexgrad/Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M)
-    *   **Embeddings (Memory):** [sentence-transformers/all-MiniLM-L6-v2](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2)
-*   **Memory:** In-browser vector storage using basic cosine similarity search 
+| Part | Default | Key | Free fallback |
+| --- | --- | --- | --- |
+| Brain | Claude Opus 5.5 at low effort | `ANTHROPIC_API_KEY` (required) | none |
+| Ears | Deepgram Nova-3 | `DEEPGRAM_API_KEY` | OpenAI if that key is set, otherwise Whisper on your CPU |
+| Voice | ElevenLabs "Brian" (deep, resonant) on Flash v2.5 | `ELEVENLABS_API_KEY` | OpenAI "onyx" if that key is set, otherwise Kokoro "am_fenrir" on your CPU |
 
+The cheapest good setup is Anthropic plus OpenAI (one key covers ears and voice). The most natural one is Anthropic plus Deepgram plus ElevenLabs. Every voice default is a deeper male voice; change it with `OS1_VOICE` (any ElevenLabs voice ID, an OpenAI voice name, or a Kokoro voice like `am_michael` or `bm_george`).
 
+For snappier, cheaper replies set `OS1_MODEL=claude-haiku-5-5`. For deeper conversations, raise `OS1_EFFORT` to `medium`. All options are in [.env.example](.env.example).
 
-## How It Works
+### Personality
 
-1.  **Model Loading:** Transformers.js downloads and initializes the Ultravox Llama 3.2 1b, Whisper-Base, Kokoro-TTS, and all-MiniLM-L6-v2 models.
-2.  **Interaction (Voice Example):**
-    *   User clicks the microphone and speaks.
-    *   Audio data is captured.
-    *   *In Parallel:* Whisper processes the audio to generate text for display and later memory storage.
-    *   The captured audio data is prepared for the Ultravox Llama 3.2 model.
-3.  **Context Building:**
-    *   An embedding is generated from the Whisper transcription
-    *   The local memory (in IndexedDB) is searched for relevant past interactions.
-    *   A system prompt is constructed containing persona instructions and relevant memory excerpts.
-    *  Top 5 memories are fetched, and are only fetched if they meet the minimum similarity threshold score of 0.28. If not, they get filtered out.
-4.  **Ultravox Llama 3.2 1b Processing:**
-    *   The system prompt (with context) and a special `<|audio|>` token are sent to the Ultravox processor.
-    *   The processor combines the text prompt embeddings with embeddings generated from the captured *audio data*.
-    *   The combined embeddings are fed to the Ultravox LLM to generate a text response stream.
-5.  **TTS Generation:** The generated text stream is sent to Kokoro TTS to generate audio chunks, which is then played back for the user to hear.
-7.  **Memory Storage:** User input (Whisper transcription or typed text) is processed. If it's short (e.g., < 15 words), the raw text is stored directly. If longer, it's sent to the LLM model for summarization (64 tokens max). Then, it is converted into an embedding and stored with the 'user' role in IndexedDB for future context retrieval.
+The persona lives in [server/persona.md](server/persona.md). It's plain prose, so edit it freely: how it talks, how long its replies are, what it cares about. It starts without a name and, like Samantha, can choose one.
 
+### Memory
 
-## Getting Started
+Everything is stored as readable JSON in `data/` (git-ignored):
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/callbacked/os1
-    cd os1 
-    ```
-2.  **Install dependencies:**
-    ```bash
-    npm i
-    ```
-3.  **Run the development server:**
-    ```bash
-    npm run dev
-    ```
-4.  Open your browser and go to `http://localhost:5173`.
+- `data/memory.json`: facts it has learned, about you and about itself. You can also browse and delete these from the brain icon in the app.
+- `data/history.json`: the recent conversation.
 
-The first time you load the application, the necessary AI models (~2GB) will be downloaded and cached by your browser. This might take a few moments. Subsequent loads should be faster.
+Delete the folder to start fresh.
 
-## Notes
+## Project layout
 
-*   Ensure you have a modern browser supporting WebGPU like any Chromium based browser.
-*   Performance depends heavily on your machine's hardware.
+```
+server/            Node server: one process serves the app and the voice socket
+  index.ts         HTTP + WebSocket server (embeds Vite in dev)
+  session.ts       the turn loop: transcribe, think, speak, barge-in
+  brain.ts         Claude streaming + prompt assembly
+  persona.md       who OS1 is
+  memory.ts        long-term memory + reflection
+  stt/, tts/       speech providers
+  text.ts          sentence chunking for streaming speech
+shared/protocol.ts the message protocol between a "body" and the server
+src/               React client: OS1 animation, VAD, playback, captions, memory viewer
+docs/              notes on running from a pocket device
+```
+
+## Scripts
+
+- `npm run dev` runs everything with hot reload on one port.
+- `npm run build && npm start` runs the production build.
+- `npm test` runs the unit tests; `npm run typecheck` and `npm run lint` check the code.
+
+## Using it from your phone or another device
+
+The microphone only works on `localhost` or over HTTPS. To talk to OS1 from a phone, run the server on your computer and expose it over HTTPS, for example with [Tailscale Serve](https://tailscale.com/kb/1312/serve) (`tailscale serve 5173`), then open that URL on the phone. See [docs/pocket-device.md](docs/pocket-device.md) for where this is headed.
 
 ## Acknowledgements
 
-This project is essentially an amalgamation of the hard work put in by these people orders of magnitude smarter than me, I would like to thank them in no particular order.
-
-*   **Siyoung Park:** For the original MIT Licensed OS1 loading animation concept [on CodePen](https://codepen.io/psyonline/pen/yayYWg).
-
-*   **ONNX Community:** For providing the ONNX version of all of the models used here
-
-*   **Xenova** For their work on Transformers.js, and reference to their LLM worker code in [transformers.js-examples](https://github.com/huggingface/transformers.js-examples)
-
-*   **Spike Jonze and the creators of the movie 'Her':** For the original inspiration. A very bleak movie to watch 12 years later lmao.
-
-
+- **callbacked** for the original OS1 project this grew out of.
+- **Siyoung Park** for the MIT-licensed OS1 loading animation concept [on CodePen](https://codepen.io/psyonline/pen/yayYWg).
+- **ricky0123/vad** for in-browser Silero voice activity detection, and **Xenova** and the **ONNX Community** for Transformers.js, Kokoro and Whisper ports.
+- **Spike Jonze** and everyone who made *Her*.
