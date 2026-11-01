@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BrainCircuit, Captions, Mic, MicOff, Send, Settings } from "lucide-react";
+import { BrainCircuit, Captions, Mic, MicOff, Send, Settings, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Textarea } from "@/components/textarea";
 import { useCompanion } from "@/hooks/useCompanion";
@@ -12,6 +12,9 @@ import "./OS1Animation.css";
 
 /** Running inside the OS1 desktop app (Electron) rather than a browser tab. */
 const isDesktopApp = navigator.userAgent.includes("Electron");
+
+/** Audio tags like [laughs] are performed by the voice, not shown. */
+const withoutTags = (text: string) => text.replace(/\[[a-z][a-z ,'-]{0,40}\]\s*/gi, "");
 
 const STATUS: Record<string, string> = {
   listening: "listening",
@@ -132,10 +135,10 @@ export function Companion() {
 
       {os.phase === "awake" && (
         <>
-          {showCaptions && (
+          {(showCaptions || !os.voiceOn) && (
             <div className="captions">
               {os.heard && <p className="caption-you">{os.heard}</p>}
-              {os.said && <p className="caption-os1">{os.said}</p>}
+              {os.said && <p className="caption-os1">{withoutTags(os.said)}</p>}
             </div>
           )}
 
@@ -165,7 +168,14 @@ export function Companion() {
               }}
             />
             <button
-              className={`memory-button ${showCaptions ? "active" : ""}`}
+              className={`memory-button ${os.voiceOn ? "" : "active"}`}
+              onClick={os.toggleVoice}
+              title={os.voiceOn ? "Quiet mode: answer in captions only" : "Let OS1 speak again"}
+            >
+              {os.voiceOn ? <Volume2 className="icon" /> : <VolumeX className="icon" />}
+            </button>
+            <button
+              className={`memory-button ${showCaptions || !os.voiceOn ? "active" : ""}`}
               onClick={toggleCaptions}
               title={showCaptions ? "Hide captions" : "Show captions"}
             >
@@ -213,6 +223,8 @@ export function Companion() {
       <SettingsPanel
         open={settingsOpen}
         firstRun={firstRun}
+        sound={os.sound}
+        onSoundChange={os.setSound}
         onClose={() => {
           setSettingsOpen(false);
           setFirstRun(false);

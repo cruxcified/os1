@@ -894,6 +894,32 @@ body.os1-theme {
   color: black;
 }
 
+.settings-check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-bottom: 0.7rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.settings-panel .settings-check input {
+  width: auto;
+  margin-top: 0.2rem;
+  accent-color: white;
+}
+
+.settings-check input:disabled + span {
+  opacity: 0.5;
+}
+
+.settings-check small {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.65;
+  margin-top: 0.1rem;
+}
+
 .settings-save {
   margin-top: 0.6rem;
   width: 100%;

@@ -29,6 +29,9 @@ What makes it feel natural:
 - **"I wasn't done."** If you keep talking before it answers, both halves are treated as one message.
 - **Memory and persona continuity.** After each exchange a small, fast model writes down anything worth remembering about you, and about itself (like the name it picks for itself). These go into every conversation. The last stretch of conversation is kept verbatim too, so it picks up where you left off.
 - **Time awareness.** It knows the time of day and how long it's been since you last talked.
+- **Expressive voice (optional).** With ElevenLabs, turn on "Expressive voice" in Settings and it can laugh, sigh or soften its voice where it fits, using ElevenLabs v4 Turbo's audio tags. If your plan or voice doesn't support that model, it quietly falls back to the regular voice.
+- **Quiet mode.** The speaker button makes it answer in captions only, for when you can talk but can't have it talk back.
+- **Sounds.** A soft chime when it wakes up, and an optional ambient pad under the conversation (Settings > Sound). Both are synthesized in the app, so there are no audio files.
 
 ## Getting started
 

@@ -8,7 +8,9 @@
  */
 
 export type ClientMessage =
-  | { type: "hello" }
+  /** voice: false = quiet mode (replies arrive as text only, no audio). */
+  | { type: "hello"; voice?: boolean }
+  | { type: "voice"; on: boolean }
   | { type: "text"; text: string }
   | { type: "interrupt" };
 
@@ -31,6 +33,8 @@ export interface SettingsView {
   tts: string;
   voice: string;
   userName: string;
+  /** The voice performs audio tags like [laughs]. Only takes effect with ElevenLabs. */
+  expressive: boolean;
   /** What "auto" currently resolves to. */
   active: { stt: string; tts: string; voice: string };
 }

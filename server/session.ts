@@ -4,7 +4,7 @@ import { reply } from "./brain.ts";
 import type { MemoryStore, HistoryEntry } from "./memory.ts";
 import type { Providers } from "./providers.ts";
 import type { TextToSpeech } from "./tts/index.ts";
-import { SentenceChunker } from "./text.ts";
+import { SentenceChunker, stripAudioTags } from "./text.ts";
 import type { AgentState, ClientMessage, ServerMessage } from "../shared/protocol.ts";
 
 const GREET_AFTER_MS = 3 * 60 * 60 * 1000;
@@ -35,6 +35,8 @@ export class Session {
   private current: Turn | null = null;
   /** Set when the user cut us off mid-sentence, until their next message. */
   private wasCutOff = false;
+  /** False in quiet mode: replies are shown as text and never spoken. */
+  private voiceOn = true;
 
   constructor(
     private ws: WebSocket,
@@ -83,6 +85,7 @@ export class Session {
   private async handleControl(msg: ClientMessage) {
     switch (msg.type) {
       case "hello": {
+        if (msg.voice !== undefined) this.voiceOn = msg.voice;
         this.sendInfo();
         // Nothing to talk with until there's a key; the app shows Settings instead.
         if (!config.keys.anthropic) break;
@@ -96,6 +99,10 @@ export class Session {
       }
       case "text":
         if (msg.text.trim()) await this.handleUserText(msg.text.trim());
+        break;
+      case "voice":
+        // Takes effect from the next reply; the client stops any audio already playing.
+        this.voiceOn = msg.on;
         break;
       case "interrupt":
         this.cancel();
@@ -182,19 +189,23 @@ export class Session {
     const chunker = new SentenceChunker();
     let fullText = "";
     let voiceFailed = false;
+    const voiceOn = this.voiceOn;
     let tts: TextToSpeech | null = null;
-    try {
-      tts = await providers.tts;
-    } catch (err) {
-      voiceFailed = true;
-      this.send({ type: "error", message: `My voice isn't available: ${(err as Error).message}` });
+    if (voiceOn) {
+      try {
+        tts = await providers.tts;
+      } catch (err) {
+        voiceFailed = true;
+        this.send({ type: "error", message: `My voice isn't available: ${(err as Error).message}` });
+      }
     }
     // Synthesis for each sentence starts as soon as the sentence exists (so they
     // overlap), but audio is sent strictly in order through this chain.
     let sendChain: Promise<void> = Promise.resolve();
 
     const speak = (sentence: string) => {
-      if (!tts) return;
+      // Nothing to say out loud (say, a lone [laughs] the voice can't perform).
+      if (!tts || !/[a-z0-9]/i.test(stripAudioTags(sentence))) return;
       const audio = tts.synthesize(sentence, signal);
       audio.catch(() => {}); // surfaced in the chain below
       sendChain = sendChain.then(async () => {
@@ -226,6 +237,12 @@ export class Session {
       for await (const delta of reply(memory, signal)) {
         fullText += delta;
         this.send({ type: "assistant_delta", turnId, text: delta });
+        if (!voiceOn) {
+          // Quiet mode: what they've read counts as said, for barge-in and history.
+          if (!turn.spoke) this.setState("speaking");
+          turn.spoke = true;
+          turn.spoken = fullText.trim();
+        }
         for (const sentence of chunker.push(delta)) speak(sentence);
       }
       for (const sentence of chunker.flush()) speak(sentence);

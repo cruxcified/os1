@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { SentenceChunker, cleanForSpeech } from "./text.ts";
+import { SentenceChunker, cleanForSpeech, stripAudioTags } from "./text.ts";
 
 function run(deltas: string[]) {
   const c = new SentenceChunker();
@@ -39,4 +39,11 @@ test("cleanForSpeech strips markdown and stage directions", () => {
   assert.equal(cleanForSpeech("*smiles* That's **really** nice."), "That's really nice.");
   assert.equal(cleanForSpeech("- one\n- two"), "one two");
   assert.equal(cleanForSpeech("See [this](https://x.y) `code`"), "See this code");
+});
+
+test("audio tags survive chunking and strip cleanly for plain voices", () => {
+  const out = run(["[chuckles] Oh, ", "that's a good one. [softly] I missed ", "you today."]);
+  assert.deepEqual(out, ["[chuckles] Oh, that's a good one.", "[softly] I missed you today."]);
+  assert.equal(stripAudioTags(out[1]), "I missed you today.");
+  assert.equal(stripAudioTags("[laughs]"), "");
 });

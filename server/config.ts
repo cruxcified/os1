@@ -21,6 +21,8 @@ export interface Settings {
   tts?: TtsProvider | "auto";
   voice?: string;
   userName?: string;
+  /** "on": the voice performs audio tags like [laughs] (ElevenLabs only). */
+  expressive?: "on" | "off";
 }
 
 const SETTINGS_ENV: Record<keyof Settings, string> = {
@@ -32,6 +34,7 @@ const SETTINGS_ENV: Record<keyof Settings, string> = {
   tts: "OS1_TTS",
   voice: "OS1_VOICE",
   userName: "OS1_USER_NAME",
+  expressive: "OS1_EXPRESSIVE",
 };
 
 export const SECRET_SETTINGS = ["anthropicKey", "deepgramKey", "elevenlabsKey", "openaiKey"] as const;
@@ -106,9 +109,13 @@ function buildConfig() {
     tts,
     voice,
     ttsSpeed: Number(env("OS1_TTS_SPEED") ?? 1),
+    /** The voice performs audio tags like [laughs] and [sighs]. Only ElevenLabs can. */
+    expressive: tts === "elevenlabs" && ["on", "true", "1"].includes(env("OS1_EXPRESSIVE") ?? ""),
 
     keys,
     elevenlabsModel: env("ELEVENLABS_MODEL") ?? "eleven_flash_v2_5",
+    /** Used instead when expressive is on: needs a model that performs audio tags. */
+    elevenlabsExpressiveModel: env("ELEVENLABS_EXPRESSIVE_MODEL") ?? "eleven_v4_turbo",
     openaiTtsModel: env("OPENAI_TTS_MODEL") ?? "gpt-4o-mini-tts",
     openaiSttModel: env("OPENAI_STT_MODEL") ?? "gpt-4o-mini-transcribe",
     deepgramModel: env("DEEPGRAM_MODEL") ?? "nova-3",

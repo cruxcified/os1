@@ -59,3 +59,10 @@ export function cleanForSpeech(text: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+/** Audio tags like [laughs] or [softly], which only an expressive voice can perform. */
+const AUDIO_TAG = /\[[a-z][a-z ,'-]{0,40}\]\s*/gi;
+
+export function stripAudioTags(text: string): string {
+  return text.replace(AUDIO_TAG, "").replace(/\s+/g, " ").trim();
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { MicVAD } from "@ricky0123/vad-web";
 import { toast } from "sonner";
 import { SpeechPlayer } from "@/lib/player";
+import { AmbientPad, playChime } from "@/lib/ambience";
 import { encodeWav16k } from "@/lib/wav";
 import type { AgentState, ClientMessage, ServerInfo, ServerMessage } from "../../shared/protocol";
 
@@ -11,6 +12,30 @@ export type Phase = "connecting" | "asleep" | "waking" | "awake";
 // so its own voice leaking from the speakers doesn't count as an interruption.
 const SPEECH_THRESHOLD = 0.5;
 const SPEECH_THRESHOLD_WHILE_TALKING = 0.8;
+
+export interface SoundPrefs {
+  /** A soft chime when OS1 wakes up. */
+  chime: boolean;
+  /** A quiet ambient pad under the conversation. */
+  ambient: boolean;
+}
+
+function loadPref(key: string, fallback: boolean): boolean {
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value === "on";
+  } catch {
+    return fallback;
+  }
+}
+
+function savePref(key: string, on: boolean) {
+  try {
+    localStorage.setItem(key, on ? "on" : "off");
+  } catch {
+    /* private mode */
+  }
+}
 
 export function useCompanion() {
   const [phase, setPhase] = useState<Phase>("connecting");
@@ -22,11 +47,23 @@ export function useCompanion() {
   const [heard, setHeard] = useState("");
   const [said, setSaid] = useState("");
   const [memoryVersion, setMemoryVersion] = useState(0);
+  /** False = quiet mode: OS1 answers in captions only. */
+  const [voiceOn, setVoiceOn] = useState(() => loadPref("os1_voice", true));
+  const [sound, setSoundState] = useState<SoundPrefs>(() => ({
+    chime: loadPref("os1_chime", true),
+    ambient: loadPref("os1_ambient", false),
+  }));
 
   const ws = useRef<WebSocket | null>(null);
   const player = useRef<SpeechPlayer | null>(null);
   const vad = useRef<MicVAD | null>(null);
   const awake = useRef(false);
+  const pad = useRef<AmbientPad | null>(null);
+  const voiceOnRef = useRef(voiceOn);
+  const soundRef = useRef(sound);
+  useEffect(() => {
+    soundRef.current = sound;
+  }, [sound]);
   /** Audio for turns at or below this id is stale (we were interrupted). */
   const droppedTurn = useRef(0);
   const currentTurn = useRef(0);
@@ -114,7 +151,7 @@ export function useCompanion() {
       socket.onopen = () => {
         retry = 0;
         if (awake.current) {
-          send({ type: "hello" });
+          send({ type: "hello", voice: voiceOnRef.current });
         } else {
           setPhase("asleep");
         }
@@ -179,7 +216,8 @@ export function useCompanion() {
       awake.current = true;
       setPhase("awake");
       setAgentState("listening");
-      send({ type: "hello" });
+      if (soundRef.current.chime) playChime(getPlayer().context);
+      send({ type: "hello", voice: voiceOnRef.current });
     } catch (err) {
       console.error(err);
       setPhase("asleep");
@@ -190,6 +228,19 @@ export function useCompanion() {
       );
     }
   }, [bargeIn, getPlayer, send]);
+
+  // Ambient pad: plays while awake if enabled, and steps back while OS1 talks.
+  useEffect(() => {
+    if (phase !== "awake" || !sound.ambient) {
+      pad.current?.stop();
+      return;
+    }
+    pad.current ??= new AmbientPad(getPlayer().context);
+    pad.current.start();
+  }, [phase, sound.ambient, getPlayer]);
+  useEffect(() => {
+    pad.current?.duck(agentState === "speaking" || userSpeaking);
+  }, [agentState, userSpeaking]);
 
   // Release the mic and audio on unmount.
   useEffect(
@@ -209,6 +260,26 @@ export function useCompanion() {
     else await v.start();
     setMicOn(!micOn);
   }, [micOn]);
+
+  const toggleVoice = useCallback(() => {
+    const next = !voiceOnRef.current;
+    voiceOnRef.current = next;
+    setVoiceOn(next);
+    savePref("os1_voice", next);
+    send({ type: "voice", on: next });
+    if (!next && player.current?.playing) {
+      // Go quiet right away; the rest of this reply keeps arriving as text.
+      player.current.stop();
+      droppedTurn.current = currentTurn.current;
+      setAgentState((s) => (s === "speaking" ? "listening" : s));
+    }
+  }, [send]);
+
+  const setSound = useCallback((next: SoundPrefs) => {
+    setSoundState(next);
+    savePref("os1_chime", next.chime);
+    savePref("os1_ambient", next.ambient);
+  }, []);
 
   const sendText = useCallback(
     (text: string) => {
@@ -230,7 +301,11 @@ export function useCompanion() {
     heard,
     said,
     memoryVersion,
+    voiceOn,
+    sound,
     wake,
+    toggleVoice,
+    setSound,
     toggleMic,
     sendText,
   };

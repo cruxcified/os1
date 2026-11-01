@@ -33,13 +33,16 @@ export function stamp(at: number): string {
   });
 }
 
+// Only sent when the voice can actually perform the tags (see config.expressive).
+const EXPRESSIVE_VOICE = `Your voice can perform audio tags written in square brackets right before the words they color, for example: [laughs], [chuckles], [sighs], [exhales], [softly], [whispers], [curious], [excited]. Use them the way a person's voice actually moves: sparingly, maybe once every few replies, and only where the feeling is real. One tag per sentence at most. They are performed, never read aloud, so don't describe actions in words instead.`;
+
 function systemPrompt(memory: MemoryStore): Anthropic.Beta.BetaTextBlockParam[] {
   const intro = config.userName
     ? `The person you talk with is ${config.userName}.`
     : "";
   return [
     // Persona is static: keep it first so it stays a stable cache prefix.
-    { type: "text", text: persona() },
+    { type: "text", text: config.expressive ? `${persona()}\n\n${EXPRESSIVE_VOICE}` : persona() },
     { type: "text", text: [intro, memory.render()].filter(Boolean).join("\n\n") },
   ];
 }

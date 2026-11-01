@@ -2,11 +2,15 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
 import type { SettingsView } from "../../shared/protocol";
+import type { SoundPrefs } from "@/hooks/useCompanion";
 
 interface SettingsPanelProps {
   open: boolean;
   /** First run: no Anthropic key yet, so OS1 can't talk until one is added. */
   firstRun: boolean;
+  /** Sounds are per-device preferences: they apply immediately, no Save needed. */
+  sound: SoundPrefs;
+  onSoundChange: (sound: SoundPrefs) => void;
   onClose: () => void;
 }
 
@@ -45,7 +49,7 @@ const VOICE_HINTS: Record<string, string> = {
   kokoro: "am_fenrir (default), am_michael, bm_george…",
 };
 
-export function SettingsPanel({ open, firstRun, onClose }: SettingsPanelProps) {
+export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }: SettingsPanelProps) {
   const [view, setView] = useState<SettingsView | null>(null);
   const [secrets, setSecrets] = useState<Record<SecretKey, string>>({
     anthropicKey: "",
@@ -57,6 +61,7 @@ export function SettingsPanel({ open, firstRun, onClose }: SettingsPanelProps) {
   const [tts, setTts] = useState("auto");
   const [voice, setVoice] = useState("");
   const [userName, setUserName] = useState("");
+  const [expressive, setExpressive] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -71,6 +76,7 @@ export function SettingsPanel({ open, firstRun, onClose }: SettingsPanelProps) {
         setTts(v.tts);
         setVoice(v.voice);
         setUserName(v.userName);
+        setExpressive(v.expressive);
       })
       .catch(() => toast.error("Couldn't load settings."));
     return () => {
@@ -84,7 +90,14 @@ export function SettingsPanel({ open, firstRun, onClose }: SettingsPanelProps) {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...secrets, stt, tts, voice, userName }),
+        body: JSON.stringify({
+          ...secrets,
+          stt,
+          tts,
+          voice,
+          userName,
+          expressive: expressive ? "on" : "off",
+        }),
       });
       if (!res.ok) throw new Error(String(res.status));
       const next = (await res.json()) as SettingsView;
@@ -188,6 +201,22 @@ export function SettingsPanel({ open, firstRun, onClose }: SettingsPanelProps) {
               onChange={(e) => setVoice(e.target.value)}
             />
           </label>
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={expressive}
+              disabled={voiceProvider !== "elevenlabs"}
+              onChange={(e) => setExpressive(e.target.checked)}
+            />
+            <span>
+              Expressive voice
+              <small>
+                {voiceProvider === "elevenlabs"
+                  ? "Laughs, sighs and whispers, using ElevenLabs v4 Turbo."
+                  : "Needs the ElevenLabs voice."}
+              </small>
+            </span>
+          </label>
           <label className="settings-field">
             <span className="settings-label">Hearing</span>
             <select value={stt} onChange={(e) => setStt(e.target.value)}>
@@ -196,6 +225,29 @@ export function SettingsPanel({ open, firstRun, onClose }: SettingsPanelProps) {
               <option value="openai">OpenAI</option>
               <option value="local">Whisper (free, on this computer)</option>
             </select>
+          </label>
+        </section>
+
+        <section>
+          <h3>Sound</h3>
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={sound.chime}
+              onChange={(e) => onSoundChange({ ...sound, chime: e.target.checked })}
+            />
+            <span>Chime when OS1 wakes up</span>
+          </label>
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={sound.ambient}
+              onChange={(e) => onSoundChange({ ...sound, ambient: e.target.checked })}
+            />
+            <span>
+              Ambient sound
+              <small>A soft, slow pad under the conversation. Best with headphones.</small>
+            </span>
           </label>
         </section>
 

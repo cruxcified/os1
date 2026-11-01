@@ -1,4 +1,5 @@
 import { config, requireKey } from "../config.ts";
+import { stripAudioTags } from "../text.ts";
 
 export interface TextToSpeech {
   /** Speak one sentence-sized chunk. Returns an encoded audio file (mp3 or wav). */
@@ -22,23 +23,46 @@ function elevenlabs(): TextToSpeech {
   const key = requireKey("elevenlabs", "ElevenLabs text-to-speech");
   const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${config.voice}/stream`);
   url.searchParams.set("output_format", "mp3_44100_128");
+  let expressive = config.expressive;
+
+  const request = (text: string, signal?: AbortSignal) =>
+    fetch(url, {
+      method: "POST",
+      signal,
+      headers: { "xi-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify(
+        expressive
+          ? {
+              text,
+              model_id: config.elevenlabsExpressiveModel,
+              // 0.5 is "natural": the tag-performing models take only 0, 0.5 or 1.
+              voice_settings: { stability: 0.5, similarity_boost: 0.8 },
+            }
+          : {
+              text: stripAudioTags(text),
+              model_id: config.elevenlabsModel,
+              voice_settings: {
+                stability: 0.45,
+                similarity_boost: 0.8,
+                style: 0.15,
+                speed: config.ttsSpeed,
+              },
+            },
+      ),
+    });
+
   return {
     async synthesize(text, signal) {
-      const res = await fetch(url, {
-        method: "POST",
-        signal,
-        headers: { "xi-api-key": key, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text,
-          model_id: config.elevenlabsModel,
-          voice_settings: {
-            stability: 0.45,
-            similarity_boost: 0.8,
-            style: 0.15,
-            speed: config.ttsSpeed,
-          },
-        }),
-      });
+      let res = await request(text, signal);
+      if (expressive && res.status >= 400 && res.status < 500 && res.status !== 401) {
+        // The expressive model refused (not on this plan, or not for this voice):
+        // fall back to the regular voice for the rest of the session.
+        console.warn(
+          `[tts] ${config.elevenlabsExpressiveModel} failed (${res.status}: ${await res.text()}); using ${config.elevenlabsModel} without audio tags`,
+        );
+        expressive = false;
+        res = await request(text, signal);
+      }
       if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${await res.text()}`);
       return Buffer.from(await res.arrayBuffer());
     },
@@ -56,7 +80,7 @@ function openai(): TextToSpeech {
         body: JSON.stringify({
           model: config.openaiTtsModel,
           voice: config.voice,
-          input: text,
+          input: stripAudioTags(text),
           speed: config.ttsSpeed,
           instructions:
             "Speak like a warm, calm, deep-voiced man in an intimate one-on-one conversation. " +
@@ -81,7 +105,7 @@ async function kokoro(): Promise<TextToSpeech> {
   type Voice = NonNullable<Parameters<typeof tts.generate>[1]>["voice"];
   return {
     async synthesize(text) {
-      const audio = await tts.generate(text, {
+      const audio = await tts.generate(stripAudioTags(text), {
         voice: config.voice as Voice,
         speed: config.ttsSpeed,
       });

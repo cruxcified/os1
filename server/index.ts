@@ -66,6 +66,7 @@ function settingsView(): SettingsView {
     tts: s.tts ?? "auto",
     voice: s.voice ?? "",
     userName: s.userName ?? config.userName ?? "",
+    expressive: ["on", "true", "1"].includes(s.expressive ?? process.env.OS1_EXPRESSIVE ?? ""),
     active: { stt: config.stt, tts: config.tts, voice: config.voice },
   };
 }
