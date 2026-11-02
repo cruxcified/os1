@@ -51,14 +51,14 @@ export function OS1Animation({ isTTSProcessing = false, showTransformation = fal
       getPoint(t: number): THREE.Vector3 {
         const x = length * Math.sin(pi2 * t);
         const y = radius * Math.cos(pi2 * 3 * t);
-        let z, tmod;
+        let tmod;
         
         tmod = t % 0.25 / 0.25;
         tmod = t % 0.25 - (2 * (1 - tmod) * tmod * -0.0185 + tmod * tmod * 0.25);
         if (Math.floor(t / 0.25) == 0 || Math.floor(t / 0.25) == 2) {
           tmod *= -1;
         }
-        z = radius * Math.sin(pi2 * 2 * (t - tmod));
+        const z = radius * Math.sin(pi2 * 2 * (t - tmod));
         
         return new THREE.Vector3(x, y, z).multiplyScalar(this.scale);
       }
@@ -103,10 +103,17 @@ export function OS1Animation({ isTTSProcessing = false, showTransformation = fal
     }
     
     // Set up renderer with pixel ratio for high DPI displays
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: true
-    });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true
+      });
+    } catch (err) {
+      // No WebGL (old GPU, remote desktop): skip the animation, keep the app working.
+      console.warn('OS1 animation disabled:', err);
+      return;
+    }
     renderer.setPixelRatio(window.devicePixelRatio);
     
     // Adjust size on resize

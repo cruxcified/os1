@@ -1,21 +1,22 @@
-import path from "path";
-
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 
-// https://vite.dev/config/
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+// The app is served by the OS1 server (server/index.ts), which embeds Vite in dev.
 export default defineConfig({
   plugins: [tailwindcss(), react()],
-  base: "/os1",
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": path.resolve(here, "./src"),
     },
   },
-  worker: { format: "es" },
   build: {
-    target: "esnext",
+    target: "es2022",
+    // three.js is most of the main bundle; the voice-activity model loads on demand.
+    chunkSizeWarningLimit: 1000,
   },
-  logLevel: process.env.NODE_ENV === "development" ? "error" : "info",
 });
