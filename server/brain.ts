@@ -3,7 +3,8 @@ import path from "node:path";
 import type Anthropic from "@anthropic-ai/sdk";
 import { anthropic } from "./anthropic.ts";
 import { config } from "./config.ts";
-import type { MemoryStore } from "./memory.ts";
+import { localChat, type ChatMessage } from "./local.ts";
+import type { HistoryEntry, MemoryStore } from "./memory.ts";
 
 /** A persona.md in the data folder overrides the built-in one, and is re-read each turn. */
 function persona(): string {
@@ -47,20 +48,37 @@ function systemPrompt(memory: MemoryStore): Anthropic.Beta.BetaTextBlockParam[] 
   ];
 }
 
-/**
- * Streams a spoken reply from Claude. Yields text deltas as they arrive so the
- * caller can start text-to-speech on the first sentence immediately.
- */
-export async function* reply(
-  memory: MemoryStore,
-  signal: AbortSignal,
-): AsyncGenerator<string> {
-  const messages: Anthropic.Beta.BetaMessageParam[] = memory.recentHistory().map((m) => ({
+/** User messages carry a timestamp so OS1 can sense time passing; the conversation starts with them. */
+function conversation(history: HistoryEntry[]) {
+  const messages = history.map((m) => ({
     role: m.role,
     content: m.role === "user" ? `[${stamp(m.at)}] ${m.content}` : m.content,
   }));
-  // The API requires the conversation to start with the user.
   while (messages.length && messages[0].role !== "user") messages.shift();
+  return messages;
+}
+
+/**
+ * Streams a spoken reply. Yields text deltas as they arrive so the caller can
+ * start text-to-speech on the first sentence immediately.
+ */
+export function reply(memory: MemoryStore, signal: AbortSignal): AsyncGenerator<string> {
+  return config.brain === "local" ? localReply(memory, signal) : claudeReply(memory, signal);
+}
+
+async function* localReply(memory: MemoryStore, signal: AbortSignal): AsyncGenerator<string> {
+  const system = systemPrompt(memory)
+    .map((b) => b.text)
+    .join("\n\n");
+  const messages: ChatMessage[] = [
+    { role: "system", content: system },
+    ...conversation(memory.recentHistory(config.localHistoryTurns)),
+  ];
+  yield* localChat(messages, signal);
+}
+
+async function* claudeReply(memory: MemoryStore, signal: AbortSignal): AsyncGenerator<string> {
+  const messages: Anthropic.Beta.BetaMessageParam[] = conversation(memory.recentHistory());
 
   const fallback = FALLBACK_MODELS.has(config.model)
     ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }

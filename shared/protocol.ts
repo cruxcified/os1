@@ -22,21 +22,35 @@ export interface ServerInfo {
   stt: string;
   tts: string;
   voice: string;
-  /** No Anthropic key yet: the app should open Settings. */
+  /** Not set up yet (or Claude chosen without a key): the app should open Settings. */
   needsSetup: boolean;
 }
 
 /** What the settings screen reads. Secrets are never sent back, only whether they're set. */
 export interface SettingsView {
   keys: Record<"anthropicKey" | "deepgramKey" | "elevenlabsKey" | "openaiKey", boolean>;
+  /** "claude", "local" (Ollama on this computer) or "auto" (Claude if there's a key). */
+  brain: string;
+  /** Ollama model tag; empty means the default. */
+  localModel: string;
   stt: string;
   tts: string;
   voice: string;
   userName: string;
   /** The voice performs audio tags like [laughs]. Only takes effect with ElevenLabs. */
   expressive: boolean;
+  /** Nothing set up yet, or Claude chosen without a key. */
+  needsSetup: boolean;
   /** What "auto" currently resolves to. */
-  active: { stt: string; tts: string; voice: string };
+  active: { brain: string; localModel: string; stt: string; tts: string; voice: string };
+}
+
+/** GET /api/local/status: the free local brain (Ollama). */
+export interface LocalStatus {
+  running: boolean;
+  installed: boolean;
+  model: string;
+  download?: { percent: number; status: string; error?: string };
 }
 
 export type ServerMessage =

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { anthropic } from "./anthropic.ts";
+import { localJson } from "./local.ts";
 import { config } from "./config.ts";
 import type { MemoryItem } from "../shared/protocol.ts";
 
@@ -71,8 +72,8 @@ export class MemoryStore {
     return this.items.length !== before;
   }
 
-  recentHistory(): HistoryEntry[] {
-    return this.history.slice(-config.historyTurns * 2);
+  recentHistory(turns = config.historyTurns): HistoryEntry[] {
+    return this.history.slice(-turns * 2);
   }
 
   lastSpokeAt(): number | undefined {
@@ -147,29 +148,39 @@ export class MemoryStore {
       .map((e) => `${e.role === "user" ? "Them" : "You"}: ${e.content}`)
       .join("\n");
 
-    const response = await anthropic().messages.parse({
-      model: config.memoryModel,
-      max_tokens: 2000,
-      system:
-        "You maintain the long-term memory of a voice companion. Given its existing memories " +
-        "and the latest exchange, return memories to add and ids to remove.\n" +
-        "Add only durable things worth recalling weeks later: names, people in their life, " +
-        "preferences, plans, feelings that matter, ongoing situations, shared jokes. " +
-        'Use about="self" for things the companion established about itself (a name it chose, ' +
-        "an opinion, something it promised). Write each memory as one short third-person " +
-        'sentence ("They have a sister named Maya."; "You chose the name Theo."). ' +
-        "Remove ids that are now wrong or superseded, and do not add duplicates. " +
-        "Small talk usually adds nothing; empty lists are the common case.",
-      messages: [
-        {
-          role: "user",
-          content: `<existing_memories>\n${existing || "(none)"}\n</existing_memories>\n\n<latest_exchange>\n${transcript}\n</latest_exchange>`,
-        },
-      ],
-      output_config: { format: zodOutputFormat(Update), effort: "low" },
-    });
+    const system =
+      "You maintain the long-term memory of a voice companion. Given its existing memories " +
+      "and the latest exchange, return memories to add and ids to remove.\n" +
+      "Add only durable things worth recalling weeks later: names, people in their life, " +
+      "preferences, plans, feelings that matter, ongoing situations, shared jokes. " +
+      'Use about="self" for things the companion established about itself (a name it chose, ' +
+      "an opinion, something it promised). Write each memory as one short third-person " +
+      'sentence ("They have a sister named Maya."; "You chose the name Theo."). ' +
+      "Remove ids that are now wrong or superseded, and do not add duplicates. " +
+      "Small talk usually adds nothing; empty lists are the common case.";
+    const prompt = `<existing_memories>\n${existing || "(none)"}\n</existing_memories>\n\n<latest_exchange>\n${transcript}\n</latest_exchange>`;
 
-    const update = response.parsed_output;
+    let update: z.infer<typeof Update> | null;
+    if (config.brain === "local") {
+      const raw = await localJson(
+        [
+          { role: "system", content: system },
+          { role: "user", content: prompt },
+        ],
+        z.toJSONSchema(Update),
+      );
+      const parsed = Update.safeParse(raw);
+      update = parsed.success ? parsed.data : null;
+    } else {
+      const response = await anthropic().messages.parse({
+        model: config.memoryModel,
+        max_tokens: 2000,
+        system,
+        messages: [{ role: "user", content: prompt }],
+        output_config: { format: zodOutputFormat(Update), effort: "low" },
+      });
+      update = response.parsed_output;
+    }
     if (!update) return false;
     const removeIds = new Set(update.remove);
     const now = Date.now();

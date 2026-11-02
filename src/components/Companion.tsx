@@ -3,6 +3,7 @@ import { BrainCircuit, Captions, Mic, MicOff, Send, Settings, Volume2, VolumeX }
 import { toast } from "sonner";
 import { Textarea } from "@/components/textarea";
 import { useCompanion } from "@/hooks/useCompanion";
+import type { DesktopBridge } from "../../shared/desktop";
 import type { MemoryItem, SettingsView } from "../../shared/protocol";
 import { OS1Animation } from "./OS1Animation";
 import { AudioVisualizer } from "./AudioVisualizer";
@@ -12,6 +13,8 @@ import "./OS1Animation.css";
 
 /** Running inside the OS1 desktop app (Electron) rather than a browser tab. */
 const isDesktopApp = navigator.userAgent.includes("Electron");
+/** Tray and global-shortcut bridge, present only inside the desktop app. */
+const desktop = (window as { os1Desktop?: DesktopBridge }).os1Desktop;
 
 /** Audio tags like [laughs] are performed by the voice, not shown. */
 const withoutTags = (text: string) => text.replace(/\[[a-z][a-z ,'-]{0,40}\]\s*/gi, "");
@@ -35,12 +38,12 @@ export function Companion() {
   const [firstRun, setFirstRun] = useState(false);
   const [setupChecked, setSetupChecked] = useState(false);
 
-  // First run: no Anthropic key yet, so open Settings before anything else.
+  // First run: nothing set up yet, so open Settings (the welcome) before anything else.
   useEffect(() => {
     fetch("/api/settings")
       .then((res) => (res.ok ? (res.json() as Promise<SettingsView>) : null))
       .then((view) => {
-        if (view && !view.keys.anthropicKey) {
+        if (view?.needsSetup) {
           setFirstRun(true);
           setSettingsOpen(true);
         }
@@ -58,6 +61,29 @@ export function Companion() {
     autoWoke.current = true;
     void wake();
   }, [phase, wake, setupChecked, settingsOpen]);
+
+  // Desktop shell: tray menu items and global shortcuts arrive as commands,
+  // and the tray shows whether OS1 is listening, muted or quiet.
+  const latest = useRef(os);
+  useEffect(() => {
+    latest.current = os;
+  });
+  useEffect(
+    () =>
+      desktop?.onCommand((command) => {
+        const o = latest.current;
+        if (command === "toggle-mic") {
+          if (o.phase === "asleep") void o.wake();
+          else if (o.phase === "awake") void o.toggleMic();
+        } else if (command === "toggle-quiet") {
+          o.toggleVoice();
+        }
+      }),
+    [],
+  );
+  useEffect(() => {
+    desktop?.reportState({ phase: os.phase, micOn: os.micOn, quiet: !os.voiceOn, agentState: os.agentState });
+  }, [os.phase, os.micOn, os.voiceOn, os.agentState]);
 
   useEffect(() => {
     document.body.classList.add("os1-theme");

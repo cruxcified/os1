@@ -828,6 +828,22 @@ body.os1-theme {
   opacity: 0.85;
 }
 
+.settings-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+.settings-note a {
+  color: inherit;
+}
+
+.settings-note .settings-clear {
+  text-decoration: underline;
+  padding: 0;
+}
+
 .settings-panel section {
   margin-top: 1.1rem;
 }

@@ -44,7 +44,18 @@ npm install
 npm run desktop        # run the app from source
 ```
 
-On first launch it asks for your API keys (only Anthropic is required), then wakes up and says hello. macOS will ask for microphone access. Headphones help: with speakers, its own voice can occasionally be mistaken for you interrupting.
+On first launch it shows a welcome screen where you choose its mind and add any API keys (all optional), then wakes up and says hello. macOS will ask for microphone access. Headphones help: with speakers, its own voice can occasionally be mistaken for you interrupting.
+
+### Living in the menu bar / tray
+
+- **Ctrl+Shift+Space** (**Cmd+Shift+Space** on a Mac) mutes or unmutes the microphone from any app.
+- **Ctrl+Shift+O** (**Cmd+Shift+O**) shows or hides the window.
+- The tray menu shows whether OS1 is listening, thinking or speaking, and has Mute Microphone, Quiet Mode, Keep Window on Top, and Open at Login. With Open at Login on, OS1 starts in the tray without opening a window, and it is listening.
+- The window remembers where you left it.
+
+### Getting the installers without building
+
+Every push to a pull request builds a Mac `.dmg` and a Windows `.exe` on GitHub. Open the run under the repo's **Actions** tab, scroll down to **Artifacts**, and download `OS1-Mac` or `OS1-Windows`. The Mac build is for Apple Silicon.
 
 ### Building an installable app
 
@@ -72,9 +83,11 @@ Then open http://localhost:5173 and tap the screen to begin.
 
 | Part | Default | Key | Free fallback |
 | --- | --- | --- | --- |
-| Brain | Claude Opus 5.5 at low effort | `ANTHROPIC_API_KEY` (required) | none |
+| Brain | Claude Opus 5.5 at low effort | `ANTHROPIC_API_KEY` | a local model through [Ollama](https://ollama.com), `gemma3:12b` by default |
 | Ears | Deepgram Nova-3 | `DEEPGRAM_API_KEY` | OpenAI if that key is set, otherwise Whisper on your CPU |
 | Voice | ElevenLabs "Brian" (deep, resonant) on Flash v2.5 | `ELEVENLABS_API_KEY` | OpenAI "onyx" if that key is set, otherwise Kokoro "am_fenrir" on your CPU |
+
+**Free, no keys at all:** install [Ollama](https://ollama.com/download), open it, and pick "Local model" under Settings > Mind (it's the automatic choice when there's no Anthropic key). The Download button there fetches the model, which is several GB. With local hearing and voice too, nothing leaves your computer. Be realistic about it: a model that fits on a laptop is noticeably less sharp and less emotionally attuned than Claude, its replies take longer on slower machines, and it keeps only the last 12 exchanges in mind (long-term memory still works). `gemma3:12b` wants about 16 GB of memory; use `gemma3:4b` on smaller laptops, or any other model from the Ollama library. Set `OLLAMA_HOST` if Ollama runs on another machine.
 
 The cheapest good setup is Anthropic plus OpenAI (one key covers ears and voice). The most natural one is Anthropic plus Deepgram plus ElevenLabs. Every voice default is a deeper male voice; change it with `OS1_VOICE` (any ElevenLabs voice ID, an OpenAI voice name, or a Kokoro voice like `am_michael` or `bm_george`).
 
@@ -97,11 +110,13 @@ Delete the folder to start fresh.
 ## Project layout
 
 ```
-desktop/main.ts    the desktop app: window, tray, mic permission; runs the server in-process
+desktop/main.ts    the desktop app: window, tray, shortcuts, mic permission; runs the server in-process
+desktop/preload.ts the small bridge that lets the tray and shortcuts talk to the page
 server/            Node server: one process serves the app and the voice socket
   index.ts         HTTP + WebSocket server (embeds Vite in dev)
   session.ts       the turn loop: transcribe, think, speak, barge-in
-  brain.ts         Claude streaming + prompt assembly
+  brain.ts         prompt assembly; streams from Claude or the local model
+  local.ts         the free local brain (Ollama)
   persona.md       who OS1 is
   memory.ts        long-term memory + reflection
   stt/, tts/       speech providers

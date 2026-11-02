@@ -4,12 +4,15 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { WebSocketServer } from "ws";
 import {
+  brainLabel,
   config,
+  needsSetup,
   readSettings,
   writeSettings,
   SECRET_SETTINGS,
   type Settings,
 } from "./config.ts";
+import { localStatus, pullLocalModel } from "./local.ts";
 import { MemoryStore } from "./memory.ts";
 import { Providers } from "./providers.ts";
 import { Session } from "./session.ts";
@@ -62,12 +65,15 @@ function settingsView(): SettingsView {
       elevenlabsKey: !!config.keys.elevenlabs,
       openaiKey: !!config.keys.openai,
     },
+    brain: s.brain ?? "auto",
+    localModel: s.localModel ?? "",
     stt: s.stt ?? "auto",
     tts: s.tts ?? "auto",
     voice: s.voice ?? "",
     userName: s.userName ?? config.userName ?? "",
     expressive: ["on", "true", "1"].includes(s.expressive ?? process.env.OS1_EXPRESSIVE ?? ""),
-    active: { stt: config.stt, tts: config.tts, voice: config.voice },
+    needsSetup: needsSetup(),
+    active: { brain: config.brain, localModel: config.localModel, stt: config.stt, tts: config.tts, voice: config.voice },
   };
 }
 
@@ -133,8 +139,19 @@ export async function startServer(options: StartOptions = {}) {
         writeSettings(mergeSettings(patch));
         providers.reload();
         for (const s of sessions) s.sendInfo();
-        console.log(`[os1] settings saved | ears: ${config.stt} | voice: ${config.tts}/${config.voice}`);
+        console.log(`[os1] settings saved | brain: ${brainLabel()} | ears: ${config.stt} | voice: ${config.tts}/${config.voice}`);
         return json(res, 200, settingsView());
+      }
+    }
+
+    if (url.pathname.startsWith("/api/local/")) {
+      if (!isLoopback(req)) return json(res, 403, { error: "Only available locally" });
+      if (url.pathname === "/api/local/status" && req.method === "GET") {
+        return json(res, 200, await localStatus());
+      }
+      if (url.pathname === "/api/local/pull" && req.method === "POST") {
+        pullLocalModel();
+        return json(res, 202, await localStatus());
       }
     }
 

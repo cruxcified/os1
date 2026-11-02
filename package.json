@@ -14,7 +14,7 @@
     "test": "node --import tsx --test server/**/*.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "build:main": "esbuild desktop/main.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-electron/main.mjs",
+    "build:main": "esbuild desktop/main.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-electron/main.mjs && esbuild desktop/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
     "desktop": "npm run build:main && electron .",
     "dist:mac": "npm run build && npm run build:main && electron-builder --mac",
     "dist:win": "npm run build && npm run build:main && electron-builder --win"

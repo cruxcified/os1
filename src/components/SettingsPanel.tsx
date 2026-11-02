@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import type { SettingsView } from "../../shared/protocol";
+import type { LocalStatus, SettingsView } from "../../shared/protocol";
 import type { SoundPrefs } from "@/hooks/useCompanion";
 
 interface SettingsPanelProps {
   open: boolean;
-  /** First run: no Anthropic key yet, so OS1 can't talk until one is added. */
+  /** First run: nothing set up yet, so OS1 waits for Start. */
   firstRun: boolean;
   /** Sounds are per-device preferences: they apply immediately, no Save needed. */
   sound: SoundPrefs;
@@ -20,7 +20,7 @@ const SECRETS: { key: SecretKey; label: string; hint: string; url: string }[] = 
   {
     key: "anthropicKey",
     label: "Anthropic",
-    hint: "Required. Claude is OS1's mind.",
+    hint: "Optional. Claude, the deepest mind (paid per use).",
     url: "https://console.anthropic.com/settings/keys",
   },
   {
@@ -57,6 +57,9 @@ export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }:
     elevenlabsKey: "",
     openaiKey: "",
   });
+  const [brain, setBrain] = useState("auto");
+  const [localModel, setLocalModel] = useState("");
+  const [local, setLocal] = useState<LocalStatus | null>(null);
   const [stt, setStt] = useState("auto");
   const [tts, setTts] = useState("auto");
   const [voice, setVoice] = useState("");
@@ -72,6 +75,8 @@ export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }:
       .then((v) => {
         if (cancelled) return;
         setView(v);
+        setBrain(v.brain);
+        setLocalModel(v.localModel);
         setStt(v.stt);
         setTts(v.tts);
         setVoice(v.voice);
@@ -84,6 +89,31 @@ export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }:
     };
   }, [open]);
 
+  const hasClaudeKey = !!view?.keys.anthropicKey || secrets.anthropicKey.trim() !== "";
+  const effectiveBrain = brain === "auto" ? (hasClaudeKey ? "claude" : "local") : brain;
+
+  // While the local brain is chosen, keep its status (and any download) fresh.
+  useEffect(() => {
+    if (!open || effectiveBrain !== "local") return;
+    let cancelled = false;
+    const poll = () =>
+      fetch("/api/local/status")
+        .then((res) => res.json() as Promise<LocalStatus>)
+        .then((s) => !cancelled && setLocal(s))
+        .catch(() => {});
+    void poll();
+    const timer = setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [open, effectiveBrain, view?.active.localModel]);
+
+  const downloadModel = async () => {
+    const res = await fetch("/api/local/pull", { method: "POST" });
+    if (res.ok) setLocal((await res.json()) as LocalStatus);
+  };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -92,6 +122,8 @@ export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...secrets,
+          brain,
+          localModel,
           stt,
           tts,
           voice,
@@ -103,8 +135,8 @@ export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }:
       const next = (await res.json()) as SettingsView;
       setView(next);
       setSecrets({ anthropicKey: "", deepgramKey: "", elevenlabsKey: "", openaiKey: "" });
-      if (!next.keys.anthropicKey) {
-        toast.error("OS1 still needs an Anthropic key to talk.");
+      if (next.needsSetup) {
+        toast.error("Claude needs an Anthropic key. Add one, or pick the free local mind.");
         return;
       }
       toast.success("Saved.");
@@ -141,10 +173,41 @@ export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }:
         </div>
         {firstRun && (
           <p className="settings-intro">
-            OS1 needs an Anthropic API key to think. The others are optional: without them it uses
-            free voices that run on this computer, which sound less natural.
+            OS1 can run entirely on this computer for free: a local mind through Ollama, plus local
+            hearing and a local voice. API keys are optional and make it smarter and more natural.
           </p>
         )}
+
+        <section>
+          <h3>Mind</h3>
+          <label className="settings-field">
+            <span className="settings-label">Think with</span>
+            <select value={brain} onChange={(e) => setBrain(e.target.value)}>
+              <option value="auto">Automatic (Claude if there's a key, otherwise local)</option>
+              <option value="claude">Claude (needs an Anthropic key)</option>
+              <option value="local">Local model (free, on this computer)</option>
+            </select>
+          </label>
+          {effectiveBrain === "local" && (
+            <>
+              <label className="settings-field">
+                <span className="settings-label">
+                  Local model
+                  <a href="https://ollama.com/library" target="_blank" rel="noreferrer">
+                    browse
+                  </a>
+                </span>
+                <input
+                  value={localModel}
+                  spellCheck={false}
+                  placeholder={`${view?.active.localModel ?? "gemma3:12b"} (try gemma3:4b on smaller laptops)`}
+                  onChange={(e) => setLocalModel(e.target.value)}
+                />
+              </label>
+              <LocalBrainStatus status={local} onDownload={() => void downloadModel()} />
+            </>
+          )}
+        </section>
 
         <section>
           <h3>API keys</h3>
@@ -265,4 +328,39 @@ export function SettingsPanel({ open, firstRun, sound, onSoundChange, onClose }:
       </div>
     </div>
   );
+}
+
+/** Where the free local mind stands: Ollama missing, model missing, downloading, or ready. */
+function LocalBrainStatus({ status, onDownload }: { status: LocalStatus | null; onDownload: () => void }) {
+  if (!status) return <p className="settings-note">Checking for Ollama…</p>;
+  if (!status.running) {
+    return (
+      <p className="settings-note">
+        The local mind runs on{" "}
+        <a href="https://ollama.com/download" target="_blank" rel="noreferrer">
+          Ollama
+        </a>
+        , a free app. Install it and open it, then come back here.
+      </p>
+    );
+  }
+  const dl = status.download;
+  if (dl && !dl.error && dl.percent < 100) {
+    return (
+      <p className="settings-note">
+        Downloading {status.model}… {dl.percent}%
+      </p>
+    );
+  }
+  if (!status.installed) {
+    return (
+      <p className="settings-note">
+        {dl?.error ? `Download failed: ${dl.error} ` : `${status.model} isn't downloaded yet (several GB). `}
+        <button type="button" className="settings-clear" onClick={onDownload}>
+          {dl?.error ? "try again" : "download"}
+        </button>
+      </p>
+    );
+  }
+  return <p className="settings-note">Ready: {status.model} is running on this computer.</p>;
 }

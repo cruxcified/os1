@@ -7,12 +7,17 @@ if (fs.existsSync(envPath)) process.loadEnvFile(envPath);
 
 export type SttProvider = "deepgram" | "openai" | "local";
 export type TtsProvider = "elevenlabs" | "openai" | "kokoro";
+/** claude: Anthropic's API (needs a key). local: a free model on this computer, through Ollama. */
+export type BrainProvider = "claude" | "local";
 
 /**
  * Settings saved from the in-app settings screen (data/settings.json). They
  * override .env / environment variables, so the desktop app never needs a .env.
  */
 export interface Settings {
+  brain?: BrainProvider | "auto";
+  /** Ollama model tag for the local brain, e.g. "gemma3:12b". */
+  localModel?: string;
   anthropicKey?: string;
   deepgramKey?: string;
   elevenlabsKey?: string;
@@ -26,6 +31,8 @@ export interface Settings {
 }
 
 const SETTINGS_ENV: Record<keyof Settings, string> = {
+  brain: "OS1_BRAIN",
+  localModel: "OS1_LOCAL_MODEL",
   anthropicKey: "ANTHROPIC_API_KEY",
   deepgramKey: "DEEPGRAM_API_KEY",
   elevenlabsKey: "ELEVENLABS_API_KEY",
@@ -56,6 +63,9 @@ export function writeSettings(settings: Settings) {
   reloadConfig();
 }
 
+/** Good conversation on a computer with 16 GB of memory; gemma3:4b suits smaller laptops. */
+export const DEFAULT_LOCAL_MODEL = "gemma3:12b";
+
 // Every default voice below is a deeper male voice; override with OS1_VOICE.
 const DEFAULT_VOICES: Record<TtsProvider, string> = {
   elevenlabs: "nPczCjzI2devNBz1zQrb", // "Brian": deep, resonant, warm
@@ -78,6 +88,9 @@ function buildConfig() {
     openai: env("OPENAI_API_KEY"),
     elevenlabs: env("ELEVENLABS_API_KEY"),
   };
+  const brain =
+    (env("OS1_BRAIN") as BrainProvider | undefined) ?? (keys.anthropic ? "claude" : "local");
+  const ollamaHost = env("OLLAMA_HOST") ?? "127.0.0.1:11434";
   const stt =
     (env("OS1_STT") as SttProvider | undefined) ??
     (keys.deepgram ? "deepgram" : keys.openai ? "openai" : "local");
@@ -99,11 +112,19 @@ function buildConfig() {
     name: env("OS1_NAME") ?? "OS1",
     userName: env("OS1_USER_NAME"),
 
+    brain,
     model: env("OS1_MODEL") ?? "claude-opus-5-5",
     effort: (env("OS1_EFFORT") ?? "low") as "low" | "medium" | "high",
     memoryModel: env("OS1_MEMORY_MODEL") ?? "claude-haiku-5-5",
     /** Turns of verbatim history sent each request; older ones live on as memories. */
     historyTurns: Number(env("OS1_HISTORY_TURNS") ?? 40),
+
+    /** The free local brain: any chat model Ollama can run. */
+    localModel: env("OS1_LOCAL_MODEL") ?? DEFAULT_LOCAL_MODEL,
+    ollamaUrl: (/^https?:\/\//.test(ollamaHost) ? ollamaHost : `http://${ollamaHost}`).replace(/\/+$/, ""),
+    /** Local models have small context windows and slow down as prompts grow. */
+    localHistoryTurns: Number(env("OS1_LOCAL_HISTORY_TURNS") ?? 12),
+    localContext: Number(env("OS1_LOCAL_CONTEXT") ?? 8192),
 
     stt,
     tts,
@@ -128,6 +149,20 @@ export const config = buildConfig();
 /** Re-reads settings.json and the environment into `config` (in place). */
 export function reloadConfig() {
   Object.assign(config, buildConfig());
+}
+
+/** Display name of what's thinking, for logs and the app. */
+export function brainLabel(): string {
+  return config.brain === "local" ? `${config.localModel} (on this computer)` : config.model;
+}
+
+/**
+ * The app should show its welcome/settings screen: nothing has been set up yet,
+ * or Claude was chosen without a key.
+ */
+export function needsSetup(): boolean {
+  if (config.brain === "claude" && !config.keys.anthropic) return true;
+  return !fs.existsSync(settingsFile) && !config.keys.anthropic && !process.env.OS1_BRAIN;
 }
 
 export function requireKey(name: keyof typeof config.keys, provider: string): string {

@@ -1,6 +1,7 @@
 import type { WebSocket } from "ws";
-import { config } from "./config.ts";
+import { brainLabel, config, needsSetup } from "./config.ts";
 import { reply } from "./brain.ts";
+import { LocalBrainError } from "./local.ts";
 import type { MemoryStore, HistoryEntry } from "./memory.ts";
 import type { Providers } from "./providers.ts";
 import type { TextToSpeech } from "./tts/index.ts";
@@ -69,11 +70,11 @@ export class Session {
       type: "ready",
       info: {
         name: config.name,
-        model: config.model,
+        model: brainLabel(),
         stt: config.stt,
         tts: config.tts,
         voice: config.voice,
-        needsSetup: !config.keys.anthropic,
+        needsSetup: needsSetup(),
       },
     });
   }
@@ -87,8 +88,8 @@ export class Session {
       case "hello": {
         if (msg.voice !== undefined) this.voiceOn = msg.voice;
         this.sendInfo();
-        // Nothing to talk with until there's a key; the app shows Settings instead.
-        if (!config.keys.anthropic) break;
+        // Nothing to talk with until it's set up; the app shows Settings instead.
+        if (needsSetup()) break;
         const last = this.services.memory.lastSpokeAt();
         if (!last) {
           await this.runTurn("(They just turned you on for the very first time.)", { quiet: true });
@@ -270,7 +271,9 @@ export class Session {
 
   private fail(message: string, err: unknown) {
     console.error("[session]", err);
-    this.send({ type: "error", message: `${message}: ${(err as Error)?.message ?? err}` });
+    // Local-brain problems already explain themselves in plain words.
+    const text = err instanceof LocalBrainError ? err.message : `${message}: ${(err as Error)?.message ?? err}`;
+    this.send({ type: "error", message: text });
     this.setState("listening");
   }
 }
